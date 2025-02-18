@@ -10,7 +10,15 @@ import smtplib
 class Mailer(Debuggable):
     def __init__(self, debug: bool = False):
         super().__init__(debug)
+        self._load_credentials()
+        self.imap = None
+        self.smtp = None
 
+    def __del__(self):
+        self.disconnect_imap()
+        self.disconnect_smtp()
+
+    def _load_credentials(self):
         self.imap_host = os.getenv("IMAP_HOST")
         self.imap_port = os.getenv("IMAP_PORT")
         self.imap_username = os.getenv("IMAP_USERNAME")
@@ -22,27 +30,13 @@ class Mailer(Debuggable):
         self.smtp_username = os.getenv("SMTP_USERNAME")
         self.smtp_password = os.getenv("SMTP_PASSWORD")
 
-        self.imap = None
-        self.smtp = None
-
-    def __del__(self):
-        try:
-            self.imap.logout() if self.imap else None
-        except Exception as e:
-            pass
-
-        try:
-            self.smtp.quit() if self.smtp else None
-        except Exception as e:
-            pass
-
     def connect_imap(self) -> bool:
         """Connect and login to IMAP server"""
         try:
             self.imap = imaplib.IMAP4_SSL(self.imap_host)
             self.imap.login(self.imap_username, self.imap_password)
         except Exception as e:
-            self.log_debug(e)
+            self.log_debug(f"IMAP connection failed: {e}")
             return False
         return True
 
@@ -50,10 +44,9 @@ class Mailer(Debuggable):
         """Connect and login to SMTP server"""
         try:
             self.smtp = smtplib.SMTP_SSL(self.smtp_host, self.smtp_port)
-            self.smtp.ehlo()
-            self.smtp.login(self.self.smtp_username, self.smtp_password)
+            self.smtp.login(self.smtp_username, self.smtp_password)
         except Exception as e:
-            self.log_debug(e)
+            self.log_debug(f"SMTP connection failed: {e}")
             return False
         return True
 
@@ -61,7 +54,7 @@ class Mailer(Debuggable):
         try:
             self.imap.logout() if self.imap else None
         except Exception as e:
-            pass
+            self.log_debug(f"Error disconnecting IMAP: {e}")
 
         self.imap = None
         return True
@@ -70,18 +63,28 @@ class Mailer(Debuggable):
         try:
             self.smtp.quit() if self.smtp else None
         except Exception as e:
-            pass
+            self.log_debug(f"Error disconnecting SMTP: {e}")
 
         self.smtp = None
         return True
 
-    def list_inbox_messages(self, all: bool = False):
-        """Retrieve a list of messages in INBOX"""
+    def ensure_imap_connected(self) -> None:
         if self.imap is not None:
             self.disconnect_imap()
-
         self.connect_imap()
+
+    def ensure_smtp_connnected(self) -> None:
+        if self.smtp is not None:
+            self.disconnect_smtp()
+        self.connect_smtp()
+
+    def _select_inbox(self) -> None:
+        self.ensure_imap_connected()
         self.imap.select("INBOX")
+
+    def list_inbox_messages(self, all: bool = False):
+        """Retrieve a list of messages in INBOX"""
+        self._select_inbox()
 
         messages = []
 
@@ -110,13 +113,25 @@ class Mailer(Debuggable):
 
         return messages
 
+    def _extract_email_body(self, msg) -> str:
+        body = ""
+
+        if msg.is_multipart():
+            for part in msg.walk():
+                content_disposition = part.get("Content-Disposition", "")
+                if part.get_content_type() == "text/plain":
+                    payload = part.get_payload(decode=True)
+                    charset = part.get_content_charset() or "utf-8"
+                    body += payload.decode(charset, errors="replace")
+        else:
+            payload = msg.get_payload(decode=True)
+            body = payload.decode('utf-8', errors="replace")
+
+        return body
+
     def read_message(self, msg_id):
         """Retrieve the details of a message"""
-        if self.imap is not None:
-            self.disconnect_imap()
-
-        self.connect_imap()
-        self.imap.select("INBOX")
+        self._select_inbox()
 
         result, msg_data = self.imap.fetch(msg_id, "(RFC822)")
         if result != "OK":
@@ -132,28 +147,13 @@ class Mailer(Debuggable):
             "Date": msg.get("Date")
         }
 
-        body = ""
-        if msg.is_multipart():
-            for part in msg.walk():
-                content_disposition = part.get("Content-Disposition", "")
-                if part.get_content_type() == "text/plain":
-                    payload = part.get_payload(decode=True)
-                    charset = part.get_content_charset() or "utf-8"
-                    body += payload.decode(charset, errors="replace")
-        else:
-            payload = msg.get_payload(decode=True)
-            body = payload.decode('utf-8', errors="replace")
-
-        message["Body"] = body
+        message["Body"] = self._extract_email_body(msg)
 
         return message
 
     def send_text_message(self, to_addrs, subject: str, body: str) -> bool:
         """Retrieve the details of a message"""
-        if self.smtp is not None:
-            self.disconnect_smtp()
-
-        self.connect_smtp()
+        self.ensure_smtp_connected()
 
         msg = MIMEMultipart()
 
@@ -178,11 +178,7 @@ class Mailer(Debuggable):
 
     def delete_message(self, msg_id) -> bool:
         """Delete a message from INBOX"""
-        if self.imap is not None:
-            self.disconnect_imap()
-
-        self.connect_imap()
-        self.imap.select("INBOX")
+        self._select_inbox()
 
         result, _ = self.imap.store(msg_id, '+FLAGS', "\\Deleted")
         if result == "OK":
