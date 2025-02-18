@@ -57,14 +57,33 @@ class Mailer(Debuggable):
             return False
         return True
 
+    def disconnect_imap(self) -> bool:
+        try:
+            self.imap.logout() if self.imap else None
+        except Exception as e:
+            pass
+
+        self.imap = None
+        return True
+
+    def disconnect_smtp(self) -> bool:
+        try:
+            self.smtp.quit() if self.smtp else None
+        except Exception as e:
+            pass
+
+        self.smtp = None
+        return True
+
     def list_inbox_messages(self, all: bool = False):
         """Retrieve a list of messages in INBOX"""
-        if self.imap is None:
-            self.connect_imap()
+        if self.imap is not None:
+            self.disconnect_imap()
+
+        self.connect_imap()
+        self.imap.select("INBOX")
 
         messages = []
-
-        self.imap.select("INBOX")
 
         criteria = "ALL" if all else "UNSEEN"
 
@@ -93,9 +112,10 @@ class Mailer(Debuggable):
 
     def read_message(self, msg_id):
         """Retrieve the details of a message"""
-        if self.imap is None:
-            self.connect_imap()
+        if self.imap is not None:
+            self.disconnect_imap()
 
+        self.connect_imap()
         self.imap.select("INBOX")
 
         result, msg_data = self.imap.fetch(msg_id, "(RFC822)")
@@ -130,8 +150,10 @@ class Mailer(Debuggable):
 
     def send_text_message(self, to_addrs, subject: str, body: str) -> bool:
         """Retrieve the details of a message"""
-        if self.smtp is None:
-            self.connect_smtp()
+        if self.smtp is not None:
+            self.disconnect_smtp()
+
+        self.connect_smtp()
 
         msg = MIMEMultipart()
 
@@ -156,9 +178,10 @@ class Mailer(Debuggable):
 
     def delete_message(self, msg_id) -> bool:
         """Delete a message from INBOX"""
-        if self.imap is None:
-            self.connect_imap()
+        if self.imap is not None:
+            self.disconnect_imap()
 
+        self.connect_imap()
         self.imap.select("INBOX")
 
         result, _ = self.imap.store(msg_id, '+FLAGS', "\\Deleted")
