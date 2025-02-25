@@ -85,10 +85,10 @@ Recent advances in Artificial Intelligence and the widespread availability of ge
 Hi, I'm **Alex Takayama**, a builder at heart, passionate about technology and problem-solving. I have experience crafting scalable applications and driving innovation for enterprises and startups. Always eager to collaborate—let’s build something great together!
 
 ### 💻 Skills
-- **Languages**: C++, C#, Java, JavaScript, Lua, Node.JS, Perl, PHP, Python, Typescript
+- **Languages**: C++, C#, Java, JavaScript, Lua, Node.JS, Perl, PHP, Python, Rust, Typescript
 - **Backend**: ASP.NET, Express, FastAPI, Flask, Laravel, Nest.JS, Phalcon, Play Framework, Slim, Spring Boot, Symfony
 - **Frontend**: Angular, Next.js, React, Vue.js
-- **Mobile**: Flutter, React Native
+- **Mobile**: React Native, Flutter
 - **Databases**: DynamoDB, MariaDB, MongoDB, MySQL, SQL Server, PostgreSQL, SQLite
 - **DevOps**: Apache, AWS, CI/CD, GCP, Docker, Memcached, NginX, RabbitMQ, Redis, Terraform, Varnish
 
